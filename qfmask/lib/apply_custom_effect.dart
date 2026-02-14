@@ -1,6 +1,8 @@
 import 'package:image/image.dart' as img;
 
-img.Image applyCustomEffect(img.Image src, {bool invertAlpha = false}) {
+//加工ロジック
+
+img.Image applyCustomEffect(img.Image src) {
   // 元の画像と同じサイズの新しい画像を作成
   final width = src.width;
   final height = src.height;
@@ -22,11 +24,9 @@ img.Image applyCustomEffect(img.Image src, {bool invertAlpha = false}) {
       final bPixel = src.getPixel(width - 1 - x, y);
       final b = 255 - bPixel.b.toInt();
 
-      // A: オプションで反転
-      final a = invertAlpha ? 255 - pixel.a.toInt() : pixel.a.toInt();
-
-      dst.setPixel(x, y, img.ColorRgba8(r, g, b, a));
+      dst.setPixel(x, y, img.ColorRgba8(r, g, b, pixel.a.toInt()));
     }
   }
   return dst;
 }
+
