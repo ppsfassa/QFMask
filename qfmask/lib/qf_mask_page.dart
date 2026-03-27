@@ -40,9 +40,12 @@ class _QFMaskPageState extends State<QFMaskPage> {
       final bytes = await files[i].readAsBytes();
       img.Image? image = img.decodeImage(bytes);
       if (image != null) {
+        image = img.bakeOrientation(image);
         final processed = applyCustomEffect(image);
-        final outPath = p.join(outputDir.path, p.basename(files[i].path));
-        await File(outPath).writeAsBytes(ImageUtils.encodeByExtension(processed, files[i].path));
+        // 可逆性を確保するため PNG で保存
+        final String pngFileName = "${p.basenameWithoutExtension(files[i].path)}.png";
+        final outPath = p.join(outputDir.path, pngFileName);
+        await File(outPath).writeAsBytes(img.encodePng(processed));
       }
       setState(() => _progress = (i + 1) / files.length);
     }
@@ -50,35 +53,32 @@ class _QFMaskPageState extends State<QFMaskPage> {
   }
 
   Future<void> _saveImage(img.Image processed, String originalFileName) async {
-  final bytes = ImageUtils.encodeByExtension(processed, originalFileName);
+    // 拡張子を強制的に .png に変更して可逆性を確保する
+    final String pngFileName = "processed_${p.basenameWithoutExtension(originalFileName)}.png";
+    final bytes = img.encodePng(processed);
 
-  if (Platform.isWindows) {
-    // Windows: 保存先を選択させる
-    String? outputFile = await FilePicker.platform.saveFile(
-      dialogTitle: '保存先を選択してください',
-      fileName: 'processed_$originalFileName',
-      type: FileType.image,
-    );
+    if (Platform.isWindows) {
+      String? outputFile = await FilePicker.platform.saveFile(
+        dialogTitle: '保存先を選択してください',
+        fileName: pngFileName,
+        type: FileType.image,
+      );
+      if (outputFile == null) return;
+      await File(outputFile).writeAsBytes(bytes);
+      _showSnackBar("保存しました: $outputFile");
+    } else {
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File(p.join(tempDir.path, pngFileName));
+      await tempFile.writeAsBytes(bytes);
 
-    if (outputFile == null) return; // キャンセル時
-
-    await File(outputFile).writeAsBytes(bytes);
-    _showSnackBar("保存しました: $outputFile");
-    
-  } else {
-    // モバイル: gal を使用してギャラリーに保存
-    final tempDir = await getTemporaryDirectory();
-    final tempFile = File(p.join(tempDir.path, 'processed_$originalFileName'));
-    await tempFile.writeAsBytes(bytes);
-
-    try {
-      await Gal.putImage(tempFile.path);
-      _showSnackBar("ギャラリーに保存しました");
-    } catch (e) {
-      _showSnackBar("保存に失敗しました: $e");
+      try {
+        await Gal.putImage(tempFile.path);
+        _showSnackBar("ギャラリーに保存しました (.png)");
+      } catch (e) {
+        _showSnackBar("保存に失敗しました: $e");
+      }
     }
   }
-}
 
   // 1枚のみ全体加工（インプットと同じ形式）
   Future<void> processSingleImage() async {
@@ -89,8 +89,8 @@ class _QFMaskPageState extends State<QFMaskPage> {
   final img.Image? decodedImage = img.decodeImage(await file.readAsBytes());
 
   if (decodedImage != null) {
-    final processed = applyCustomEffect(decodedImage);
-    // 共通保存メソッドを呼び出し
+    final bakedImage = img.bakeOrientation(decodedImage);
+    final processed = applyCustomEffect(bakedImage);
     await _saveImage(processed, p.basename(file.path));
   }
 }
@@ -104,9 +104,10 @@ Future<void> openPartialEditor() async {
   final img.Image? decodedImage = img.decodeImage(await file.readAsBytes());
 
   if (decodedImage != null && mounted) {
+    final bakedImage = img.bakeOrientation(decodedImage);
     final img.Image? processedResult = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => ROIEditor(sourceImage: decodedImage)),
+      MaterialPageRoute(builder: (context) => ROIEditor(sourceImage: bakedImage)),
     );
 
     if (processedResult != null) {

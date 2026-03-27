@@ -64,13 +64,33 @@ class _ROIEditorState extends State<ROIEditor> {
 
   img.Image _applyPartialEffect() {
     final RenderBox renderBox = _imageKey.currentContext!.findRenderObject() as RenderBox;
-    final double scaleX = widget.sourceImage.width / renderBox.size.width;
-    final double scaleY = widget.sourceImage.height / renderBox.size.height;
+    final Size widgetSize = renderBox.size;
+    final double imageWidth = widget.sourceImage.width.toDouble();
+    final double imageHeight = widget.sourceImage.height.toDouble();
 
-    int x1 = (startPoint!.dx * scaleX).toInt().clamp(0, widget.sourceImage.width);
-    int y1 = (startPoint!.dy * scaleY).toInt().clamp(0, widget.sourceImage.height);
-    int x2 = (endPoint!.dx * scaleX).toInt().clamp(0, widget.sourceImage.width);
-    int y2 = (endPoint!.dy * scaleY).toInt().clamp(0, widget.sourceImage.height);
+    // BoxFit.contain の計算
+    final double srcAspect = imageWidth / imageHeight;
+    final double dstAspect = widgetSize.width / widgetSize.height;
+
+    double scale;
+    double offsetX = 0;
+    double offsetY = 0;
+
+    if (srcAspect > dstAspect) {
+      scale = widgetSize.width / imageWidth;
+      offsetY = (widgetSize.height - imageHeight * scale) / 2;
+    } else {
+      scale = widgetSize.height / imageHeight;
+      offsetX = (widgetSize.width - imageWidth * scale) / 2;
+    }
+
+    int mapX(double x) => ((x - offsetX) / scale).toInt().clamp(0, widget.sourceImage.width);
+    int mapY(double y) => ((y - offsetY) / scale).toInt().clamp(0, widget.sourceImage.height);
+
+    int x1 = mapX(startPoint!.dx);
+    int y1 = mapY(startPoint!.dy);
+    int x2 = mapX(endPoint!.dx);
+    int y2 = mapY(endPoint!.dy);
 
     final int left = x1 < x2 ? x1 : x2;
     final int top = y1 < y2 ? y1 : y2;
